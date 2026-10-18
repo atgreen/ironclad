@@ -45,6 +45,13 @@
   (declare (type sha256-regs regs))
   (declare (type (simple-array (unsigned-byte 32) (64)) block)
            #.(burn-baby-burn))
+  ;; EGCL compresses the sixteen message words itself, expanding them as it
+  ;; goes; SHA256-EXPAND-BLOCK is a no-op there.
+  #+ironclad-egcl-primitives
+  (progn
+    (egcl-ext:crypto-sha256-words regs block)
+    regs)
+  #-ironclad-egcl-primitives
   (let ((a (sha256-regs-a regs)) (b (sha256-regs-b regs))
         (c (sha256-regs-c regs)) (d (sha256-regs-d regs))
         (e (sha256-regs-e regs)) (f (sha256-regs-f regs))
@@ -91,6 +98,9 @@
 (defun sha256-expand-block (block)
   (declare (type (simple-array (unsigned-byte 32) (64)) block)
            #.(burn-baby-burn))
+  #+ironclad-egcl-primitives
+  (progn block (values))
+  #-ironclad-egcl-primitives
   (flet ((sigma0 (x)
            (declare (type (unsigned-byte 32) x))
            (logxor (rol32 x 25) (rol32 x 14) (mod32ash x -3)))
@@ -155,6 +165,9 @@
 
 (define-digest-updater sha256
   (flet ((compress (state sequence offset)
+           #+ironclad-egcl-primitives
+           (egcl-ext:crypto-sha256-block (sha256-regs state) sequence offset)
+           #-ironclad-egcl-primitives
            (let ((block (sha256-block state)))
              (fill-block-ub8-be block sequence offset)
              (sha256-expand-block block)

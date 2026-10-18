@@ -131,6 +131,26 @@
           (replace iv j0))
         (encrypt-in-place cipher iv)
         mac)
+      ;; EGCL multiplies by the hash key itself (GMAC-MUL), so keep the key
+      ;; as 16 octets rather than building the 64-bit multiplication table.
+      #+ironclad-egcl-primitives
+      (let ((cipher (if (or cipher-name (null (gmac-cipher mac)))
+                        (make-cipher cipher-name :key key :mode :ecb)
+                        (reinitialize-instance (gmac-cipher mac) :key key :mode :ecb)))
+            (hkey (make-array 16 :element-type '(unsigned-byte 8) :initial-element 0))
+            (iv (gmac-iv mac)))
+        (setf (gmac-key mac) hkey
+              (gmac-total-length mac) 0
+              (gmac-buffer-length mac) 0
+              (gmac-cipher mac) cipher)
+        (fill (gmac-accumulator mac) 0)
+        (encrypt-in-place cipher hkey)
+        (let ((j0 (j0 hkey initialization-vector)))
+          (setf (gmac-j0 mac) j0)
+          (replace iv j0))
+        (encrypt-in-place cipher iv)
+        mac)
+      #-ironclad-egcl-primitives
       (let ((table (make-array '(128 2 2) :element-type '(unsigned-byte 64)
                                           :initial-element 0))
             (cipher (if cipher-name
@@ -166,6 +186,9 @@
 (defun gmac-mul (accumulator key)
   (declare (type (simple-array (unsigned-byte 8) (16)) accumulator)
            (optimize (speed 3) (space 0) (safety 0) (debug 0)))
+  #+ironclad-egcl-primitives
+  (egcl-ext:crypto-ghash-mul accumulator key)
+  #-ironclad-egcl-primitives
   (if #+(and sbcl x86-64 ironclad-assembly) (pclmulqdq-supported-p)
       #-(and sbcl x86-64 ironclad-assembly) nil
       #+(and sbcl x86-64 ironclad-assembly) (gmac-mul-fast accumulator key)

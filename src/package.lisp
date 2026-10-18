@@ -259,7 +259,12 @@
   #+ecl
   (list :ironclad-fast-mod32-arithmetic
         :ironclad-fast-mod64-arithmetic)
-  #-(or sbcl cmu lispworks openmcl ecl)
+  ;; EGCL implements the hot AES, GHASH and SHA-256 block functions in its
+  ;; runtime; use them when this EGCL has them.
+  #+egcl
+  (when (fboundp (intern "CRYPTO-AES-ENCRYPT-BLOCK" "EGCL-EXT"))
+    '(:ironclad-egcl-primitives))
+  #-(or sbcl cmu lispworks openmcl ecl egcl)
   nil)
 
 (dolist (f (ironclad-implementation-features))

@@ -857,6 +857,11 @@
            #+nil (rk-ref (x) `(aref round-keys (+ ,x 0))))
 
 (define-block-encryptor aes 16
+  #+ironclad-egcl-primitives
+  (egcl-ext:crypto-aes-encrypt-block (encryption-round-keys context) (n-rounds context)
+                                     plaintext plaintext-start
+                                     ciphertext ciphertext-start)
+  #-ironclad-egcl-primitives
   (let ((round-keys (encryption-round-keys context))
         (n-rounds (n-rounds context)))
     (declare (type aes-round-keys round-keys))
@@ -907,6 +912,11 @@
                            (apply-round (rk-ref 3) t3 t0 t1 t2))))))))
 
 (define-block-decryptor aes 16
+  #+ironclad-egcl-primitives
+  (egcl-ext:crypto-aes-decrypt-block (decryption-round-keys context) (n-rounds context)
+                                     ciphertext ciphertext-start
+                                     plaintext plaintext-start)
+  #-ironclad-egcl-primitives
   (let ((round-keys (decryption-round-keys context))
         (n-rounds (n-rounds context)))
     (declare (type aes-round-keys round-keys))
