@@ -208,6 +208,9 @@ the content on normal form exit."
 (defun keccak-rounds (state)
   (declare (type keccak-state state)
            (optimize (speed 3) (space 0) (safety 0) (debug 0)))
+  #+ironclad-egcl-primitives-64
+  (egcl-ext:crypto-keccak-f1600 state)
+  #-ironclad-egcl-primitives-64
   (with-keccak-state-accessors (state)
     (with-temp-keccak-state (b)
       (with-temp-keccak-rows (c d)
@@ -241,10 +244,25 @@ the content on normal form exit."
                                                (get-keccak-round-constant i)))))))
   (values))
 
+(declaim (inline keccak-absorb))
+(defun keccak-absorb (state bit-rate input start)
+  "Merge one BIT-RATE block of INPUT from START into STATE, then permute it."
+  #+ironclad-egcl-primitives-64
+  (if (zerop (mod bit-rate 64))
+      (egcl-ext:crypto-keccak-absorb state (truncate bit-rate 8) input start)
+      (progn
+        (keccak-state-merge-input state bit-rate input start)
+        (keccak-rounds state)))
+  #-ironclad-egcl-primitives-64
+  (progn
+    (keccak-state-merge-input state bit-rate input start)
+    (keccak-rounds state)))
+
 
 ;;;
 ;;; Message Padding for last block
 ;;;
+
 
 (defun pad-message-to-width (message bit-width padding-type)
   (let* ((message-byte-length (length message))
@@ -413,8 +431,7 @@ the content on normal form exit."
           (return-from sha3-update))
 
         ;; Else handle now complete buffer
-        (keccak-state-merge-input keccak-state bit-rate buffer 0)
-        (keccak-rounds keccak-state)
+        (keccak-absorb keccak-state bit-rate buffer 0)
         (setf (sha3-buffer-index state) 0)
         (setf start (+ start remainder))))
 
@@ -422,8 +439,7 @@ the content on normal form exit."
     (loop for block-offset of-type fixnum from start below end by rate-bytes
           do (cond
                ((<= (+ block-offset rate-bytes) end)
-                (keccak-state-merge-input keccak-state bit-rate vector block-offset)
-                (keccak-rounds keccak-state))
+                (keccak-absorb keccak-state bit-rate vector block-offset))
                (t
                 (replace buffer vector :start1 0 :end1 rate-bytes :start2 block-offset :end2 end)
                 (setf (sha3-buffer-index state) (- end block-offset))))))
@@ -454,13 +470,12 @@ the content on normal form exit."
              (type integer output-byte-length))
 
     ;; Process remaining data after padding it
-    (keccak-state-merge-input keccak-state
-                              bit-rate
-                              (pad-message-to-width (subseq buffer 0 buffer-index)
-                                                    bit-rate
-                                                    padding-type)
-                              0)
-    (keccak-rounds keccak-state)
+    (keccak-absorb keccak-state
+                   bit-rate
+                   (pad-message-to-width (subseq buffer 0 buffer-index)
+                                         bit-rate
+                                         padding-type)
+                   0)
     (setf (sha3-buffer-index state) 0)
 
     ;; Get output
