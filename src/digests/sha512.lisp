@@ -54,6 +54,13 @@
   (declare (type sha512-regs regs))
   (declare (type (simple-array (unsigned-byte 64) (80)) block)
            #.(burn-baby-burn))
+  ;; EGCL compresses the sixteen message words itself, expanding them as it
+  ;; goes; SHA512-EXPAND-BLOCK is a no-op there.
+  #+ironclad-egcl-primitives-64
+  (progn
+    (egcl-ext:crypto-sha512-words regs block)
+    regs)
+  #-ironclad-egcl-primitives-64
   (let ((a (sha512-regs-a regs)) (b (sha512-regs-b regs))
         (c (sha512-regs-c regs)) (d (sha512-regs-d regs))
         (e (sha512-regs-e regs)) (f (sha512-regs-f regs))
@@ -89,6 +96,9 @@
 (defun sha512-expand-block (block)
   (declare (type (simple-array (unsigned-byte 64) (80)) block)
            #.(burn-baby-burn))
+  #+ironclad-egcl-primitives-64
+  (progn block (values))
+  #-ironclad-egcl-primitives-64
   (flet ((sigma (x r1 r2 r3)
            (logxor (ror64 x r1) (ror64 x r2) (ash x (- r3)))))
     #+ironclad-fast-mod64-arithmetic (declare (inline sigma))
@@ -168,9 +178,15 @@
 (define-digest-updater sha512
   (flet ((compress (state sequence offset)
            (let ((block (sha512-block state)))
-             (fill-block-ub8-be/64 block sequence offset)
-             (sha512-expand-block block)
-             (update-sha512-block (sha512-regs state) block))))
+             #+ironclad-egcl-primitives-64
+             (progn
+               block
+               (egcl-ext:crypto-sha512-block (sha512-regs state) sequence offset))
+             #-ironclad-egcl-primitives-64
+             (progn
+               (fill-block-ub8-be/64 block sequence offset)
+               (sha512-expand-block block)
+               (update-sha512-block (sha512-regs state) block)))))
     (declare (dynamic-extent #'compress))
     (declare (notinline mdx-updater))
     (mdx-updater state #'compress sequence start end)))

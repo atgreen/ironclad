@@ -260,10 +260,14 @@
   (list :ironclad-fast-mod32-arithmetic
         :ironclad-fast-mod64-arithmetic)
   ;; EGCL implements the hot AES, GHASH and SHA-256 block functions in its
-  ;; runtime; use them when this EGCL has them.
+  ;; runtime; use them when this EGCL has them. Newer EGCLs also implement
+  ;; SHA-512 and Keccak, whose 64-bit words are bignums in Lisp there.
   #+egcl
-  (when (fboundp (intern "CRYPTO-AES-ENCRYPT-BLOCK" "EGCL-EXT"))
-    '(:ironclad-egcl-primitives))
+  (append
+   (when (fboundp (intern "CRYPTO-AES-ENCRYPT-BLOCK" "EGCL-EXT"))
+     '(:ironclad-egcl-primitives))
+   (when (fboundp (intern "CRYPTO-KECCAK-F1600" "EGCL-EXT"))
+     '(:ironclad-egcl-primitives-64)))
   #-(or sbcl cmu lispworks openmcl ecl egcl)
   nil)
 
